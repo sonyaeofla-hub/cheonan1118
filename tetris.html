@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#101526">
+<title>미니 테트리스</title>
+<style>
+:root{color-scheme:dark;--bg:#101526;--panel:#1a2340;--line:#344267;--text:#f4f6ff;--muted:#aab5d1;--accent:#8b7cff}
+*{box-sizing:border-box}
+body{margin:0;min-height:100svh;background:radial-gradient(ellipse at top,#25345b 0,#101526 55%);color:var(--text);font-family:system-ui,-apple-system,"Segoe UI",sans-serif;display:grid;place-items:center;padding:18px}
+.app{width:min(100%,760px)}
+header{text-align:center;margin-bottom:16px}
+h1{margin:0;font-size:clamp(1.8rem,5vw,2.7rem);letter-spacing:.12em}
+.sub{color:var(--muted);font-size:.9rem;margin-top:5px}
+.layout{display:grid;grid-template-columns:minmax(0,1fr) 190px;gap:14px;align-items:start}
+.board-wrap,.panel{background:#141d34;border:1px solid var(--line);border-radius:18px;box-shadow:0 18px 50px #0005}
+.board-wrap{padding:12px;position:relative}
+canvas{display:block}
+#board{width:100%;height:auto;aspect-ratio:1/2;background:#0b1121;border-radius:10px;touch-action:none}
+.panel{padding:14px;display:grid;gap:12px}
+.stat{background:#0f172b;border:1px solid #293758;border-radius:12px;padding:10px}
+.stat small{display:block;color:var(--muted);font-size:.75rem}
+.stat strong{font-size:1.45rem;font-variant-numeric:tabular-nums}
+#next{width:100%;height:auto;aspect-ratio:1.35;background:#0f172b;border-radius:10px}
+.actions{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+button{border:1px solid #53618c;border-radius:11px;background:#29365d;color:white;padding:11px 8px;font:inherit;font-weight:700;cursor:pointer;touch-action:manipulation}
+button:hover{filter:brightness(1.18)}button:active{transform:translateY(1px)}
+button.primary{background:linear-gradient(135deg,#7868f6,#4f74db);border:0}
+.help{color:var(--muted);font-size:.78rem;line-height:1.6}
+.overlay{position:absolute;inset:12px;display:grid;place-items:center;background:#080d1bcc;border-radius:10px;text-align:center;padding:20px}
+.overlay[hidden]{display:none}
+.overlay-card{background:#1a2544;border:1px solid #52618c;border-radius:16px;padding:22px;max-width:260px}
+.overlay-card h2{margin:0 0 7px}.overlay-card p{color:var(--muted);margin:0 0 14px;font-size:.9rem}
+.mobile-controls{display:none;grid-template-columns:repeat(4,1fr);gap:8px;margin-top:12px}
+.mobile-controls button{font-size:1.2rem;padding:13px 5px}
+footer{text-align:center;color:var(--muted);font-size:.75rem;margin-top:13px}
+@media(max-width:560px){body{padding:12px}.layout{grid-template-columns:minmax(0,1fr) 112px;gap:8px}.board-wrap{padding:7px}.panel{padding:8px;gap:8px;border-radius:14px}.stat{padding:7px}.stat strong{font-size:1.1rem}.stat small{font-size:.65rem}#next{min-height:65px}.actions{grid-template-columns:1fr}.actions button{padding:9px 4px;font-size:.8rem}.help{font-size:.67rem}.mobile-controls{display:grid}.mobile-controls button{padding:12px 3px}header{margin-bottom:10px}}
+@media(max-width:370px){.layout{grid-template-columns:minmax(0,1fr) 96px}.panel{padding:6px}}
+</style>
+</head>
+<body>
+<main class="app">
+<header><h1>테트리스</h1><div class="sub">블록을 쌓고 한 줄씩 지워보세요!</div></header>
+<section class="layout">
+ <div class="board-wrap">
+  <canvas id="board" width="300" height="600" aria-label="테트리스 게임 보드"></canvas>
+  <div class="overlay" id="overlay"><div class="overlay-card"><h2 id="overlayTitle">준비됐나요?</h2><p id="overlayText">시작 버튼을 눌러 게임을 시작하세요.</p><button class="primary" id="startBtn">게임 시작</button></div></div>
+ </div>
+ <aside class="panel">
+  <div class="stat"><small>점수</small><strong id="score">0</strong></div>
+  <div class="stat"><small>최고 점수</small><strong id="best">0</strong></div>
+  <div class="stat"><small>레벨</small><strong id="level">1</strong></div>
+  <div class="stat"><small>지운 줄</small><strong id="lines">0</strong></div>
+  <div><small style="color:var(--muted)">다음 블록</small><canvas id="next" width="140" height="100"></canvas></div>
+  <div class="actions"><button class="primary" id="pauseBtn">일시정지</button><button id="restartBtn">다시 시작</button></div>
+  <div class="help"><b>키보드</b><br>← → 이동 · ↓ 내리기<br>↑ 회전 · Space 하드 드롭<br>P 일시정지</div>
+ </aside>
+</section>
+<div class="mobile-controls" aria-label="터치 조작">
+ <button data-act="left" aria-label="왼쪽">←</button><button data-act="rotate" aria-label="회전">↻</button><button data-act="down" aria-label="아래">↓</button><button data-act="right" aria-label="오른쪽">→</button>
+ <button data-act="drop" style="grid-column:span 4">빠르게 떨어뜨리기 ⤓</button>
+</div>
+<footer>키보드와 터치 모두 지원 · 화면 크기에 맞춰 자동 조정</footer>
+</main>
+<script>
+(()=>{
+'use strict';
+const COLS=10,ROWS=20,S=30;
+const COLORS={I:'#42d9e8',O:'#f6d65b',T:'#ad79f7',S:'#69d58b',Z:'#f16f7d',J:'#6d9cf7',L:'#f5a45d'};
+const SHAPES={
+ I:[[1,1,1,1]], O:[[1,1],[1,1]], T:[[0,1,0],[1,1,1]],
+ S:[[0,1,1],[1,1,0]], Z:[[1,1,0],[0,1,1]],
+ J:[[1,0,0],[1,1,1]], L:[[0,0,1],[1,1,1]]
+};
+const boardCanvas=document.querySelector('#board'),ctx=boardCanvas.getContext('2d');
+const nextCanvas=document.querySelector('#next'),nctx=nextCanvas.getContext('2d');
+const $=id=>document.getElementById(id);
+let grid,piece,nextPiece,score=0,lines=0,level=1,best=Number(localStorage.getItem('mini-tetris-best')||0);
+let running=false,paused=false,gameOver=false,last=0,dropCounter=0,raf=0;
+$('best').textContent=best;
+function cloneShape(s){return s.map(r=>r.slice())}
+function randomPiece(){const keys=Object.keys(SHAPES),type=keys[Math.floor(Math.random()*keys.length)];return {type,matrix:cloneShape(SHAPES[type]),x:0,y:0}}
+function reset(){
+ grid=Array.from({length:ROWS},()=>Array(COLS).fill(''));score=0;lines=0;level=1;
+ piece=randomPiece();nextPiece=randomPiece();spawn();updateStats();drawNext();gameOver=false;paused=false;running=true;
+ $('pauseBtn').textContent='일시정지';hideOverlay();last=0;dropCounter=0;cancelAnimationFrame(raf);raf=requestAnimationFrame(loop);
+}
+function spawn(){piece=nextPiece;nextPiece=randomPiece();piece.x=Math.floor((COLS-piece.matrix[0].length)/2);piece.y=0;drawNext();if(collides(piece,0,0)){running=false;gameOver=true;showOverlay('게임 종료',`최종 점수: ${score.toLocaleString()}점`,'다시 도전');}}
+function collides(p,dx,dy,m=p.matrix){for(let y=0;y<m.length;y++)for(let x=0;x<m[y].length;x++)if(m[y][x]){let nx=p.x+x+dx,ny=p.y+y+dy;if(nx<0||nx>=COLS||ny>=ROWS||(ny>=0&&grid[ny][nx]))return true;}return false}
+function merge(){piece.matrix.forEach((row,y)=>row.forEach((v,x)=>{if(v&&piece.y+y>=0)grid[piece.y+y][piece.x+x]=piece.type}));}
+function clearLines(){let count=0;for(let y=ROWS-1;y>=0;y--){if(grid[y].every(Boolean)){grid.splice(y,1);grid.unshift(Array(COLS).fill(''));count++;y++;}}if(count){lines+=count;score+=[0,100,300,500,800][count]*level;level=Math.floor(lines/10)+1;updateStats();}}
+function move(dx,dy){if(!collides(piece,dx,dy)){piece.x+=dx;piece.y+=dy;return true}return false}
+function rotate(){const m=piece.matrix,rot=m[0].map((_,i)=>m.map(row=>row[i]).reverse());for(const kick of [0,-1,1,-2,2])if(!collides(piece,kick,0,rot)){piece.matrix=rot;piece.x+=kick;return}}
+function lock(){merge();clearLines();spawn();}
+function softDrop(){if(move(0,1)){score++;updateStats()}else lock();dropCounter=0}
+function hardDrop(){let d=0;while(move(0,1))d++;score+=d*2;updateStats();lock();}
+function updateStats(){$('score').textContent=score.toLocaleString();$('lines').textContent=lines;$('level').textContent=level;if(score>best){best=score;localStorage.setItem('mini-tetris-best',best);$('best').textContent=best;}}
+function cell(c,pieceData,col,row,size,alpha=1){
+ c.globalAlpha=alpha;
+ c.fillStyle=COLORS[pieceData.type]||'#fff';
+ c.fillRect(col*size+1,row*size+1,size-2,size-2);
+ c.fillStyle='#ffffff35';
+ c.fillRect(col*size+3,row*size+3,size-6,3);
+ c.globalAlpha=1;
+}
+function draw(){
+ ctx.clearRect(0,0,300,600);ctx.fillStyle='#0b1121';ctx.fillRect(0,0,300,600);
+ ctx.strokeStyle='#ffffff0b';ctx.lineWidth=1;for(let x=0;x<=COLS;x++){ctx.beginPath();ctx.moveTo(x*S,0);ctx.lineTo(x*S,600);ctx.stroke()}for(let y=0;y<=ROWS;y++){ctx.beginPath();ctx.moveTo(0,y*S);ctx.lineTo(300,y*S);ctx.stroke()}
+ for(let y=0;y<ROWS;y++)for(let x=0;x<COLS;x++)if(grid[y][x])cell(ctx,{type:grid[y][x]},x,y,S);
+ if(piece){let ghost={...piece,y:piece.y};while(!collides(ghost,0,1))ghost.y++;ghost.matrix.forEach((r,y)=>r.forEach((v,x)=>{if(v)cell(ctx,ghost,x+ghost.x,y+ghost.y,S,.2)}));piece.matrix.forEach((r,y)=>r.forEach((v,x)=>{if(v)cell(ctx,piece,x+piece.x,y+piece.y,S)}));}
+}
+function drawNext(){nctx.clearRect(0,0,140,100);const m=nextPiece.matrix,size=22,ox=(140-m[0].length*size)/2,oy=(100-m.length*size)/2;m.forEach((r,y)=>r.forEach((v,x)=>{if(v){nctx.fillStyle=COLORS[nextPiece.type];nctx.fillRect(ox+x*size+1,oy+y*size+1,size-2,size-2);nctx.fillStyle='#ffffff30';nctx.fillRect(ox+x*size+3,oy+y*size+3,size-6,3)}}));}
+function loop(t=0){if(!running)return;const dt=t-last;last=t;if(!paused){dropCounter+=dt;if(dropCounter>Math.max(90,800-(level-1)*65)){if(!move(0,1))lock();dropCounter=0;}draw();}raf=requestAnimationFrame(loop);}
+function showOverlay(title,msg,button){$('overlayTitle').textContent=title;$('overlayText').textContent=msg;$('startBtn').textContent=button||'게임 시작';$('overlay').hidden=false}
+function hideOverlay(){$('overlay').hidden=true}
+function togglePause(){if(gameOver||!running)return;paused=!paused;$('pauseBtn').textContent=paused?'계속하기':'일시정지';if(paused)showOverlay('일시정지','잠시 쉬어가세요.','계속하기');else hideOverlay();}
+function act(a){if(!running||paused)return;if(a==='left')move(-1,0);if(a==='right')move(1,0);if(a==='down')softDrop();if(a==='rotate')rotate();if(a==='drop')hardDrop();draw();}
+document.addEventListener('keydown',e=>{const map={ArrowLeft:'left',ArrowRight:'right',ArrowDown:'down',ArrowUp:'rotate', ' ':'drop'};if(map[e.key]){e.preventDefault();act(map[e.key]);}if(e.key.toLowerCase()==='p')togglePause();if(e.key==='Enter'&&(!running||paused)){$('startBtn').click();}});
+document.querySelectorAll('[data-act]').forEach(b=>{const a=b.dataset.act;b.addEventListener('click',()=>act(a));});
+$('startBtn').addEventListener('click',()=>{if(paused){paused=false;$('pauseBtn').textContent='일시정지';hideOverlay();}else reset();});
+$('pauseBtn').addEventListener('click',togglePause);$('restartBtn').addEventListener('click',reset);
+let repeatTimer;document.querySelectorAll('[data-act="left"],[data-act="right"],[data-act="down"]').forEach(b=>{b.addEventListener('pointerdown',()=>{const a=b.dataset.act;repeatTimer=setInterval(()=>act(a),115)});['pointerup','pointerleave','pointercancel'].forEach(ev=>b.addEventListener(ev,()=>clearInterval(repeatTimer)));});
+grid=Array.from({length:ROWS},()=>Array(COLS).fill(''));piece=randomPiece();nextPiece=randomPiece();piece.x=3;draw();drawNext();
+})();
+</script>
+</body>
+</html>
